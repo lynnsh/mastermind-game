@@ -10,10 +10,11 @@ import java.util.Random;
 packets messaging:
 0s - client : new game
 1-8 - client : colors
-9s - user won the game - not used - client determines if user won the game
+9 - client : stop current game
 10 - return ok
 12 - in place clue
 13 - out place clue
+14 - client : do start new game
 ffff - user lost the game
 */
 
@@ -26,27 +27,34 @@ public class MMSession {
     private byte[] answerSet = new byte[4];
     private Random random = new Random();
     private int round;
+    private boolean playAgain = true;
 
     public MMSession(Socket socket) {
         this.socket = socket;
     }
 
-    public void startNewSession() throws IOException {
-        boolean playAgain = true;
+    public void startNewSession() throws IOException {       
         //games
         while(playAgain && !socket.isClosed()) {
+            boolean gameOver = true;
             startNewGame(); 
             System.out.println(Arrays.toString(answerSet));
             
             //game
-            //close socket if client wants to end the game?
-            while(round < 11 && !socket.isClosed()) {
+            while(round < 11 && !socket.isClosed() && gameOver) {
                 //get client message
                 byte[] message = receiveMessage();
-                byte[] clues = generateClues(message);
-                sendMessage(clues);
-                round++;
-            }             
+                if(message[0]!= 9){
+                    byte[] clues = generateClues(message);
+                    sendMessage(clues);
+                    round++;
+                }
+                else
+                    gameOver = false;
+                System.out.println("message: "+Arrays.toString(message) +" " + round);
+            }
+            //playAgain = true;
+            //playAgain = receiveMessage()[0] == 14;
         }
     }
 
@@ -55,11 +63,14 @@ public class MMSession {
         //get client message
         //check contents?
         byte[] message = receiveMessage();
-        //reply
-        byte[] answer = new byte[4];
-        answer[0] = 10;
-        sendMessage(answer);
-        createAnswerSet(message);
+        if(message[0] != 9) {
+            //reply
+            byte[] answer = new byte[4];
+            answer[0] = 10;
+            sendMessage(answer);
+            createAnswerSet(message);
+        }
+        else playAgain = false;
     }
     
     private byte[] receiveMessage() throws IOException {
@@ -84,7 +95,7 @@ public class MMSession {
 
     private void sendMessage(byte[] message) throws IOException {
         OutputStream out = socket.getOutputStream();
-        out.write(message);
+        out.write(message, 0, message.length);
     }
     
     
@@ -100,8 +111,6 @@ public class MMSession {
             else
                 findOutPlaceClues(message, clues, clue, answer);               
         }
-        
-        round++;
         
         return clues;
     }
