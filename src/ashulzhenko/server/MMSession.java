@@ -6,108 +6,106 @@ import java.io.*;
 import java.util.Arrays;
 import java.util.Random;
 
-/*
-packets messaging:
-0s - client : new game
-1-8 - client : colors
-9 - client : stop current game
-10 - return ok
-12 - in place clue
-13 - out place clue
-14 - client : do start new game
-ffff - user lost the game
-*/
 
 /**
- * represents >=1 mastermind games
- * @author aline
+ * Session class that service a client. A client can play multiple games.
+ * 
+ * These are the packet messaging rules:
+ * 
+ * 0 0 0 0 - client requests new game (or a specific answer set at the beginning of a new game),
+ * 1-8 - client color guesses,
+ * 9 0 0 0 - client requests to stop the current game,
+ * 10 10 10 10 - server sends OK to start a new game,
+ * 12 - server indicates an in-place clue (0 if none found),
+ * 13 - server indicates an out-place clue (0 if none found),
+ * 14 0 0 0 - client requests to stop session (i.e. do not start a new game),
+ * 15 15 15 15 - server indicates that the user lost the game.
+ * 
+ * @author Alena Shulzhenko
+ * @version 08/09/2016
+ * @since 1.8
  */
 public class MMSession {
     private Socket socket;
-    private byte[] answerSet = new byte[4];
+    private int[] answerSet = new int[4];
     private Random random = new Random();
     private int round;
-    private boolean playAgain = true;
+    private boolean playNewGame = true;
+    private MMPacket util;
 
+    /**
+     * Instantiates the object when receiving the socket.
+     * @param socket the socket that is created when client connects to the server.
+     */
     public MMSession(Socket socket) {
         this.socket = socket;
+        MMPacket util = new MMPacket();
     }
 
+    /**
+     * Starts session with the client.
+     * @throws IOException If there is a problem when communicating to the client.
+     */
     public void startNewSession() throws IOException {       
-        //games
-        while(playAgain && !socket.isClosed()) {
-            boolean gameOver = true;
+        //loops through multiple games.
+        while(playNewGame && !socket.isClosed()) {
+            boolean userQuit = false;
             startNewGame(); 
             System.out.println(Arrays.toString(answerSet));
             
-            //game
-            while(round < 11 && !socket.isClosed() && gameOver) {
+            //loop for one game
+            while(round < 11 && !socket.isClosed() && !userQuit) {
                 //get client message
-                byte[] message = receiveMessage();
-                if(message[0]!= 9){
-                    byte[] clues = generateClues(message);
-                    sendMessage(clues);
+                int[] message = util.receiveMessage(socket);
+                //check if user wants to quit this game
+                if(message[0]!= 9) {
+                    int[] clues = generateClues(message);
+                    util.sendMessage(socket, clues);
                     round++;
                 }
                 else
-                    gameOver = false;
+                    userQuit = true;
                 System.out.println("message: "+Arrays.toString(message) +" " + round);
             }
-            //playAgain = true;
-            //playAgain = receiveMessage()[0] == 14;
         }
     }
 
+    /**
+     * Initiates a new game and creates a new answer set.
+     * @throws IOException If there is a problem when communicating to the client.
+     */
     private void startNewGame() throws IOException {
         round = 1;
-        //get client message
-        //check contents?
-        byte[] message = receiveMessage();
-        if(message[0] != 9) {
+        int[] message = util.receiveMessage(socket);
+        if(message[0] != 14) {
             //reply
-            byte[] answer = new byte[4];
-            answer[0] = 10;
-            sendMessage(answer);
+            int[] answer = new int[4];
+            Arrays.fill(answer, 10);
+            util.sendMessage(socket, answer);
             createAnswerSet(message);
         }
-        else playAgain = false;
-    }
-    
-    private byte[] receiveMessage() throws IOException {
-        byte[] byteBuffer = new byte[4];
-        InputStream in = socket.getInputStream();
-        
-        int totalBytesRcvd = 0;	// Total bytes received so far
-        int bytesRcvd;		// Bytes received in last read
-        while (totalBytesRcvd < byteBuffer.length)
-        {
-          if ((bytesRcvd = in.read(byteBuffer, totalBytesRcvd,
-                            byteBuffer.length - totalBytesRcvd)) == -1)
-              //where to catch it?
-            throw new SocketException("Connection closed prematurely");
-          totalBytesRcvd += bytesRcvd;
-        }
-        
-        return byteBuffer;
+        else 
+            //stop all games
+            playNewGame = false;
     }
     
     
-
-    private void sendMessage(byte[] message) throws IOException {
-        OutputStream out = socket.getOutputStream();
-        out.write(message, 0, message.length);
-    }
     
-    
-    private byte[] generateClues(byte[] message) {
-        byte[] clues = new byte[4];       
-        byte[] answer = Arrays.copyOf(answerSet, answerSet.length);
+    /**
+     * Generates clues according to client's guesses.
+     * @param message client's message with the guesses.
+     * @return generated clues according to client's guesses.
+     */
+    private int[] generateClues(int[] message) {
+        int[] clues = new int[4];       
+        int[] answer = Arrays.copyOf(answerSet, answerSet.length);
         
-        int clue = findInPlaceClues(message, clues, answer);       
+        int clue = findInPlaceClues(message, clues, answer); //the position in clues array       
         
         if(clue != 4) {
             if(round == 10)
-                Arrays.fill(clues, (byte)0xf);
+                //game is lost
+                Arrays.fill(clues, 0xf);
             else
                 findOutPlaceClues(message, clues, clue, answer);               
         }
@@ -115,9 +113,15 @@ public class MMSession {
         return clues;
     }
     
-    private int findInPlaceClues(byte[] message, byte[] clues, byte[] answer) {
-        int clue = 0;
-        
+    /**
+     * Finds in-place clues according to the client's guesses.
+     * @param message client's message with the guesses.
+     * @param clues the array to fill if any in-place clues found.
+     * @param answer the copy of the answer set array.
+     * @return the current position (index) in clues array.
+     */
+    private int findInPlaceClues(int[] message, int[] clues, int[] answer) {
+        int clue = 0;        
         for(int i = 0; i < message.length; i++) {
             if(message[i] == answer[i]) {
                 clues[clue] = 12;
@@ -125,12 +129,18 @@ public class MMSession {
                 message[i] = 0;
                 answer[i] = 0;
             }
-        }
-        
+        }       
         return clue;
     }
     
-    private void findOutPlaceClues(byte[] message, byte[] clues, int clue, byte[] answer) {
+    /**
+     * Finds out-place clues according to the client's guesses.
+     * @param message client's message with the guesses.
+     * @param clues the array to fill if any out-place clues found.
+     * @param clue the current position (index) in clues array.
+     * @param answer the copy of the answer set array.
+     */
+    private void findOutPlaceClues(int[] message, int[] clues, int clue, int[] answer) {
         for (int i = 0; i < message.length; i++) {
             if(message[i] != 0) {
                 int index = searchArray(answer, message[i]);
@@ -143,19 +153,29 @@ public class MMSession {
         }
     }
 
-    private void createAnswerSet(byte[] message) {
+    /**
+     * Creates the answer set for the game. 
+     * If the client sends some values instead of 0's, 
+     * they are chosen instead for the answer set.
+     * @param message the client's message.
+     */
+    private void createAnswerSet(int[] message) {
         if(message[0] != 0) {
             answerSet = Arrays.copyOf(message, message.length);
         }
         else {
             for(int i = 0; i < answerSet.length; i++)
-                answerSet[i] = (byte)(random.nextInt(8)+1);
+                answerSet[i] = random.nextInt(8)+1;
         }
     }
     
-    
-    
-    private int searchArray(byte[] array, int key) {
+    /**
+     * Searches array to find whether the given key is in the array.
+     * @param array the array to search.
+     * @param key the key to find in the array.
+     * @return the index of the key in the array; -1 if the key is not found.
+     */
+    private int searchArray(int[] array, int key) {
         for(int i = 0; i < array.length; i++) {
             if(array[i] == key )
                 return i;
