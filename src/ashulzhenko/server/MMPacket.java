@@ -12,21 +12,24 @@ import java.net.SocketException;
  * @since 1.8
  */
 public class MMPacket {
+    private Socket socket;
     
     /**
-     * Instantiates the object.
+     * Instantiates the object when receiving the socket.
+     * @param socket the Socket object.
      */
-    public MMPacket() {}
+    public MMPacket(Socket socket) {
+        this.socket = socket;
+    }
     
     /**
      * Receives the message through the socket.
-     * @param socket the Socket object.
      * @return the message that is received
      * @throws IOException If there is a communication problem.
      */
-    public int[] receiveMessage(Socket socket) throws IOException {
+    public int[] receiveMessage() throws IOException {
         byte[] byteBuffer = new byte[4];
-        InputStream in = socket.getInputStream();
+        InputStream in = this.socket.getInputStream();
         
         int totalBytesRcvd = 0;	// Total bytes received so far
         int bytesRcvd;		// Bytes received in last read
@@ -47,18 +50,17 @@ public class MMPacket {
     }
     
     /**
-     * Sends the message through the socket.
-     * @param socket the Socket object.
+     * Sends the message through the socket..
      * @param message the message to send.
      * @throws IOException If there is a communication problem.
      */
-    public void sendMessage(Socket socket, int[] message) throws IOException {
+    public void sendMessage(int[] message) throws IOException {
         byte[] byteBuffer = new byte[message.length];
         //convert int[] to byte[]
         for(int i = 0; i < message.length; i++)
             byteBuffer[i] = (byte)message[i];
         
-        OutputStream out = socket.getOutputStream();
+        OutputStream out = this.socket.getOutputStream();
         out.write(byteBuffer, 0, byteBuffer.length);
     }
 }

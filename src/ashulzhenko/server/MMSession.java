@@ -1,7 +1,6 @@
 package ashulzhenko.server;
 
 import java.net.Socket;
-import java.net.SocketException;
 import java.io.*;
 import java.util.Arrays;
 import java.util.Random;
@@ -27,11 +26,11 @@ import java.util.Random;
  */
 public class MMSession {
     private Socket socket;
-    private int[] answerSet = new int[4];
-    private Random random = new Random();
-    private int round;
-    private boolean playNewGame = true;
+    private int[] answerSet;
+    private Random random;
+    private boolean playNewGame;
     private MMPacket util;
+    private int round;
 
     /**
      * Instantiates the object when receiving the socket.
@@ -39,7 +38,10 @@ public class MMSession {
      */
     public MMSession(Socket socket) {
         this.socket = socket;
-        MMPacket util = new MMPacket();
+        this.util = new MMPacket(socket);
+        this.answerSet = new int[4];
+        this.random = new Random();
+        this.playNewGame = true;
     }
 
     /**
@@ -56,11 +58,11 @@ public class MMSession {
             //loop for one game
             while(round < 11 && !socket.isClosed() && !userQuit) {
                 //get client message
-                int[] message = util.receiveMessage(socket);
+                int[] message = util.receiveMessage();
                 //check if user wants to quit this game
                 if(message[0]!= 9) {
                     int[] clues = generateClues(message);
-                    util.sendMessage(socket, clues);
+                    util.sendMessage(clues);
                     round++;
                 }
                 else
@@ -76,12 +78,12 @@ public class MMSession {
      */
     private void startNewGame() throws IOException {
         round = 1;
-        int[] message = util.receiveMessage(socket);
+        int[] message = util.receiveMessage();
         if(message[0] != 14) {
             //reply
             int[] answer = new int[4];
             Arrays.fill(answer, 10);
-            util.sendMessage(socket, answer);
+            util.sendMessage(answer);
             createAnswerSet(message);
         }
         else 
