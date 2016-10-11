@@ -21,7 +21,7 @@ import java.util.Random;
  * 15 15 15 15 - server indicates that the user lost the game.
  * 
  * @author Alena Shulzhenko
- * @version 08/09/2016
+ * @version 11/09/2016
  * @since 1.8
  */
 public class MMSession {
@@ -158,17 +158,32 @@ public class MMSession {
     /**
      * Creates the answer set for the game. 
      * If the client sends some values instead of 0's, 
-     * they are chosen instead for the answer set.
+     * they are chosen instead for the answer set. 
+     * If client values are invalid, random answer set is created instead.
      * @param message the client's message.
      */
     private void createAnswerSet(int[] message) {
+        boolean valid = true;
         if(message[0] != 0) {
-            answerSet = Arrays.copyOf(message, message.length);
+            //check that the supplied answer set is valid
+            for(int i : message)
+                if (i < 1 || i > 8)
+                    valid = false;           
+            if(valid)
+                answerSet = Arrays.copyOf(message, message.length);
+            else
+                createRandom();
         }
-        else {
-            for(int i = 0; i < answerSet.length; i++)
+        else
+            createRandom();
+    }
+    
+    /**
+     * Creates a random answer set.
+     */
+    private void createRandom() {
+        for(int i = 0; i < answerSet.length; i++)
                 answerSet[i] = random.nextInt(8)+1;
-        }
     }
     
     /**
