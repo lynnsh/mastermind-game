@@ -35,7 +35,8 @@ public class MMServer {
             
         }
         catch (IOException ex) {
-                System.out.println("There is an error when communicating with the client.");
+                System.out.println("There is an error when communicating "
+                                 + "with the client.");
             }
     }
     

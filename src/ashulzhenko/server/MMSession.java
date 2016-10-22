@@ -11,7 +11,9 @@ import java.util.Random;
  * 
  * These are the packet messaging rules:
  * 
- * 0 0 0 0 - client requests new game (or a specific answer set at the beginning of a new game),
+ * 0 0 0 0 - client requests new game 
+ * (if there is a specific answer set at the beginning of a new game,
+ * it is sent instead),
  * 1-8 - client color guesses,
  * 9 0 0 0 - client requests to stop the current game,
  * 10 10 10 10 - server sends OK to start a new game,
@@ -21,7 +23,7 @@ import java.util.Random;
  * 15 15 15 15 - server indicates that the user lost the game.
  * 
  * @author Alena Shulzhenko
- * @version 11/09/2016
+ * @version 21/09/2016
  * @since 1.8
  */
 public class MMSession {
@@ -29,12 +31,14 @@ public class MMSession {
     private int[] answerSet;
     private Random random;
     private boolean playNewGame;
+    private boolean clientWin;
     private MMPacket util;
     private int round;
 
     /**
      * Instantiates the object when receiving the socket.
-     * @param socket the socket that is created when client connects to the server.
+     * @param socket the socket that is created 
+     *                when client connects to the server.
      */
     public MMSession(Socket socket) {
         this.socket = socket;
@@ -42,39 +46,51 @@ public class MMSession {
         this.answerSet = new int[4];
         this.random = new Random();
         this.playNewGame = true;
+        this.clientWin = false;
     }
 
     /**
      * Starts session with the client.
-     * @throws IOException If there is a problem when communicating to the client.
+     * If the client requested to end the current game or to finish all games,
+     * the server sends the answer set.
+     * @throws IOException If there is a problem when communicating 
+     *                     to the client.
      */
     public void startNewSession() throws IOException {       
+        
+        boolean quitCurrent = false;
         //loops through multiple games.
-        while(playNewGame && !socket.isClosed()) {
-            boolean userQuit = false;
+        while(playNewGame && !socket.isClosed())
+        {
             startNewGame(); 
             System.out.println(Arrays.toString(answerSet));
             
             //loop for one game
-            while(round < 11 && !socket.isClosed() && !userQuit) {
+            while(round < 11 && !socket.isClosed() && 
+                  !quitCurrent && !clientWin) {
                 //get client message
                 int[] message = util.receiveMessage();
-                //check if user wants to quit this game
-                if(message[0]!= 9) {
-                    int[] clues = generateClues(message);
-                    util.sendMessage(clues);
-                    round++;
-                }
-                else
-                    userQuit = true;
-                System.out.println("message: "+Arrays.toString(message) +" " + round);
+                //reply to the message
+                quitCurrent = configureSendReply(message);
+                
+                System.out.println("message: " + Arrays.toString(message) + " " + round);
             }
+            if(!clientWin)
+                util.sendMessage(answerSet);
+            
+            quitCurrent = false;
+            clientWin = false;
+            
+            System.out.println("Out of the game loop");
         }
+        
+        System.out.println("Out of the session loop");
     }
 
     /**
      * Initiates a new game and creates a new answer set.
-     * @throws IOException If there is a problem when communicating to the client.
+     * @throws IOException If there is a problem when communicating 
+     *                     to the client.
      */
     private void startNewGame() throws IOException {
         round = 1;
@@ -86,28 +102,57 @@ public class MMSession {
             util.sendMessage(answer);
             createAnswerSet(message);
         }
-        else 
+        else {
             //stop all games
             playNewGame = false;
+        }
     }
     
-    
+    /**
+     * Sends the appropriate reply according to the client's message.
+     * 
+     * @param message client's message with the guesses.
+     * @return quitCurrent - true if clients wants to quit the current game.
+     * @throws IOException If there is a problem when communicating 
+     *                     to the client.
+     */
+    private boolean configureSendReply(int[] message) throws IOException {
+        //if user wants to quit all games
+        if (message[0] == 14) {
+            playNewGame = false;
+            return true;
+        }
+        //if user wants to quit the current game
+        else if(message[0] == 9) {
+            return true;
+        }
+        else {
+            int[] clues = generateClues(message);
+            util.sendMessage(clues);
+            round++;
+            return false;
+        }   
+    }
     
     /**
      * Generates clues according to client's guesses.
-     * @param message client's message with the guesses.
+     * @param clientMessage client's message with the guesses.
      * @return generated clues according to client's guesses.
      */
-    private int[] generateClues(int[] message) {
+    private int[] generateClues(int[] clientMessage) {
         int[] clues = new int[4];       
         int[] answer = Arrays.copyOf(answerSet, answerSet.length);
+        int[] message = Arrays.copyOf(clientMessage, clientMessage.length);
         
-        int clue = findInPlaceClues(message, clues, answer); //the position in clues array       
+        //the position in clues array
+        int clue = findInPlaceClues(message, clues, answer); 
         
-        if(clue != 4) {
+        if (clue == 4)
+            clientWin = true;
+        else {
             if(round == 10)
                 //game is lost
-                Arrays.fill(clues, 0xf);
+                Arrays.fill(clues, 15);
             else
                 findOutPlaceClues(message, clues, clue, answer);               
         }
@@ -142,7 +187,8 @@ public class MMSession {
      * @param clue the current position (index) in clues array.
      * @param answer the copy of the answer set array.
      */
-    private void findOutPlaceClues(int[] message, int[] clues, int clue, int[] answer) {
+    private void findOutPlaceClues(int[] message, int[] clues, 
+                                   int clue, int[] answer) {
         for (int i = 0; i < message.length; i++) {
             if(message[i] != 0) {
                 int index = searchArray(answer, message[i]);

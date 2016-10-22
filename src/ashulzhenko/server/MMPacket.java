@@ -50,7 +50,7 @@ public class MMPacket {
     }
     
     /**
-     * Sends the message through the socket..
+     * Sends the message through the socket.
      * @param message the message to send.
      * @throws IOException If there is a communication problem.
      */
