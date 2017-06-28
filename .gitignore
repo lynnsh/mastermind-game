@@ -1,3 +1,5 @@
-/dist/
-/build/
-/nbproject/private/
+/MMServerApp/dist/
+/MMServerApp/build/
+/MMClientApp/nbproject/private/
+/MMClientApp/target/
+/MMServerApp/nbproject/private/
