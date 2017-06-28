@@ -1,7 +1,7 @@
 #### mastermind-game
 ## MasterMind Assignment
 
-_Tools: Java, JavaFX, Java.net_
+_Tools: Java, JavaFX, java.net_
 
 Description:
 
